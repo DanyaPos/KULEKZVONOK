@@ -119,8 +119,10 @@
     };
 
     // Перед установкой remote description проверяем состояние signalingState
-    if (peerConnection.signalingState !== 'stable') {
-      console.warn('Соединение не в состоянии "stable", ждем...');
+    if (peerConnection.signalingState === 'stable') {
+      console.log('signalingState стабилен, продолжаем');
+    } else {
+      console.warn('Неожиданное состояние signalingState для offer:', peerConnection.signalingState);
       return;
     }
 
@@ -141,20 +143,20 @@
   }
 });
 
-
-// Обработка answer
 socket.on('answer', async (answer) => {
   try {
     console.log('Получен answer от другого участника');
-    if (peerConnection.signalingState !== "have-local-offer") {
-      console.warn("Неожиданное состояние signalingState для answer:", peerConnection.signalingState);
-      return;
+    if (peerConnection.signalingState === 'stable') {
+      console.log('signalingState стабилен, устанавливаем remote description');
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    } else {
+      console.warn('Неожиданное состояние signalingState для answer:', peerConnection.signalingState);
     }
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
   } catch (err) {
     console.error('Ошибка обработки answer:', err);
   }
 });
+
 
 // Обработка ICE-кандидатов
 socket.on('candidate', async (candidate) => {
