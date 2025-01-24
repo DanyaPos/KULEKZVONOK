@@ -117,14 +117,6 @@
       }
     };
 
-    // Проверка состояния signalingState перед установкой remoteDescription
-    if (peerConnection.signalingState === 'stable') {
-      console.log('signalingState стабилен, продолжаем установку remoteDescription');
-    } else {
-      console.warn('Неожиданное состояние signalingState для offer:', peerConnection.signalingState);
-      return;
-    }
-
     // Устанавливаем remote description
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
     console.log('Remote description установлено');
@@ -137,6 +129,7 @@
     // Отправляем ответ на offer
     socket.emit('answer', answer);
     console.log('Answer отправлен:', answer);
+
   } catch (err) {
     console.error('Ошибка обработки offer:', err);
   }
@@ -146,7 +139,7 @@ socket.on('answer', async (answer) => {
   try {
     console.log('Получен answer от другого участника');
     
-    // Проверка состояния signalingState перед установкой remoteDescription
+    // Проверяем, что peerConnection не находится в ошибочном состоянии
     if (peerConnection.signalingState === 'have-remote-offer') {
       console.log('signalingState в "have-remote-offer", устанавливаем remote description');
       await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
@@ -159,18 +152,22 @@ socket.on('answer', async (answer) => {
   }
 });
 
-
-    // Обработка ICE-кандидатов
-    socket.on('candidate', async (candidate) => {
-      try {
-        console.log('Получен ICE-кандидат');
-        if (peerConnection) {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-      } catch (err) {
-        console.error('Ошибка обработки ICE-кандидата:', err);
-      }
-    });
+// Обработка ICE-кандидатов
+socket.on('candidate', async (candidate) => {
+  try {
+    console.log('Получен ICE-кандидат');
+    
+    // Проверка, что удалённое описание установлено, прежде чем добавлять кандидат
+    if (peerConnection.remoteDescription) {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log('ICE-кандидат добавлен');
+    } else {
+      console.warn('Попытка добавить ICE-кандидат без установленного remote description');
+    }
+  } catch (err) {
+    console.error('Ошибка обработки ICE-кандидата:', err);
+  }
+});
 
     // Завершение звонка
     endCallBtn.addEventListener('click', () => {
