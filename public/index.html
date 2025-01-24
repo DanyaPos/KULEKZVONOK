@@ -89,6 +89,7 @@
     socket.on('offer', async (offer) => {
   try {
     console.log('Получен offer от другого участника');
+    
     await getLocalStream();
 
     // Очистка старого соединения, если оно существует
@@ -96,11 +97,16 @@
       peerConnection.close();
       peerConnection = null;
     }
+    
     peerConnection = new RTCPeerConnection(config);
 
     // Добавление треков
     localStream.getTracks().forEach(track => {
-      peerConnection.addTrack(track, localStream);
+      const senders = peerConnection.getSenders();
+      const senderExists = senders.some(sender => sender.track === track);
+      if (!senderExists) {
+        peerConnection.addTrack(track, localStream);
+      }
     });
 
     peerConnection.onicecandidate = (event) => {
@@ -117,9 +123,14 @@
       }
     };
 
-    // Устанавливаем remote description
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    console.log('Remote description установлено');
+    // Устанавливаем remote description, если состояние signalingState стабильное
+    if (peerConnection.signalingState === 'stable') {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      console.log('Remote description установлено');
+    } else {
+      console.warn('Неожиданное состояние signalingState для offer:', peerConnection.signalingState);
+      return;
+    }
 
     // Создаем и устанавливаем локальный ответ
     const answer = await peerConnection.createAnswer();
@@ -129,26 +140,8 @@
     // Отправляем ответ на offer
     socket.emit('answer', answer);
     console.log('Answer отправлен:', answer);
-
   } catch (err) {
     console.error('Ошибка обработки offer:', err);
-  }
-});
-
-socket.on('answer', async (answer) => {
-  try {
-    console.log('Получен answer от другого участника');
-    
-    // Проверяем, что peerConnection не находится в ошибочном состоянии
-    if (peerConnection.signalingState === 'have-remote-offer') {
-      console.log('signalingState в "have-remote-offer", устанавливаем remote description');
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log('Remote description установлено');
-    } else {
-      console.warn('Неожиданное состояние signalingState для answer:', peerConnection.signalingState);
-    }
-  } catch (err) {
-    console.error('Ошибка обработки answer:', err);
   }
 });
 
@@ -156,13 +149,12 @@ socket.on('answer', async (answer) => {
 socket.on('candidate', async (candidate) => {
   try {
     console.log('Получен ICE-кандидат');
-    
-    // Проверка, что удалённое описание установлено, прежде чем добавлять кандидат
+    // Убедитесь, что remoteDescription установлено
     if (peerConnection.remoteDescription) {
       await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
       console.log('ICE-кандидат добавлен');
     } else {
-      console.warn('Попытка добавить ICE-кандидат без установленного remote description');
+      console.warn('Не установлено удалённое описание для добавления ICE-кандидата');
     }
   } catch (err) {
     console.error('Ошибка обработки ICE-кандидата:', err);
