@@ -82,55 +82,100 @@
       endCallBtn.style.display = 'inline-block';
     }
 
-    // Получаем offer от других участников конференции
+    // Обработка offer
     socket.on('offer', async (offer) => {
-      console.log('Получен offer от другого участника');
-      await getLocalStream();
+  try {
+    console.log('Получен offer от другого участника');
+    await getLocalStream();
 
-      peerConnection = new RTCPeerConnection(config);
-      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit('candidate', event.candidate);
-          console.log('Отправлен ICE-кандидат:', event.candidate);
-        }
-      };
-
-      peerConnection.ontrack = (event) => {
-        if (event.track.kind === "audio") {
-          remoteAudio.srcObject = event.streams[0];
-          console.log('Получен аудиопоток от другого участника');
-        }
-      };
-
-      await peerConnection.setRemoteDescription(offer);  // Сначала устанавливаем remote description (offer)
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);  // Затем создаем и устанавливаем локальное описание
-      socket.emit('answer', answer);
-      console.log('Answer отправлен:', answer);
-  });
-
-    // Получаем answer от другого участника
-    socket.on('answer', async (answer) => {
-      console.log('Получен answer от другого участника');
-      await peerConnection.setRemoteDescription(answer);
-    });
-
-    // Получаем ICE-кандидата от других участников
-    socket.on('candidate', async (candidate) => {
-      console.log('Получен ICE-кандидат');
-      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-    });
-
-    // Завершение звонка
-    endCallBtn.addEventListener('click', () => {
+    // Очистка существующего соединения
+    if (peerConnection) {
       peerConnection.close();
-      localStream.getTracks().forEach(track => track.stop());
-      startCallBtn.style.display = 'inline-block';
-      endCallBtn.style.display = 'none';
-      console.log('Звонок завершён');
+      peerConnection = null;
+    }
+    peerConnection = new RTCPeerConnection(config);
+
+    localStream.getTracks().forEach(track => {
+      // Проверяем, не был ли трек уже добавлен
+      const senders = peerConnection.getSenders();
+      const senderExists = senders.some(sender => sender.track === track);
+      if (!senderExists) {
+        peerConnection.addTrack(track, localStream);
+      }
     });
+
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit('candidate', event.candidate);
+        console.log('Отправлен ICE-кандидат:', event.candidate);
+      }
+    };
+
+    peerConnection.ontrack = (event) => {
+      if (event.track.kind === "audio") {
+        remoteAudio.srcObject = event.streams[0];
+        console.log('Получен аудиопоток от другого участника');
+      }
+    };
+
+    // Проверяем состояние перед установкой Remote Description
+    if (peerConnection.signalingState !== "stable") {
+      console.warn("Соединение не в состоянии stable, ожидание...");
+      return;
+    }
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit('answer', answer);
+    console.log('Answer отправлен:', answer);
+  } catch (err) {
+    console.error('Ошибка обработки offer:', err);
+  }
+});
+
+
+// Обработка answer
+socket.on('answer', async (answer) => {
+  try {
+    console.log('Получен answer от другого участника');
+    if (peerConnection.signalingState !== "have-local-offer") {
+      console.warn("Неожиданное состояние signalingState для answer:", peerConnection.signalingState);
+      return;
+    }
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+  } catch (err) {
+    console.error('Ошибка обработки answer:', err);
+  }
+});
+
+// Обработка ICE-кандидатов
+socket.on('candidate', async (candidate) => {
+  try {
+    console.log('Получен ICE-кандидат');
+    if (peerConnection) {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+  } catch (err) {
+    console.error('Ошибка обработки ICE-кандидата:', err);
+  }
+});
+
+// Завершение звонка
+endCallBtn.addEventListener('click', () => {
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+  startCallBtn.style.display = 'inline-block';
+  endCallBtn.style.display = 'none';
+  console.log('Звонок завершён');
+});
+
 
     // Обработка событий подключения/отключения участников
     socket.on('user-connected', (userId) => {
