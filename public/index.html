@@ -86,64 +86,79 @@
       endCallBtn.style.display = 'inline-block';
     }
 
-    // Обработка offer
     socket.on('offer', async (offer) => {
-      try {
-        console.log('Получен offer от другого участника');
-        await getLocalStream();
+  try {
+    console.log('Получен offer от другого участника');
+    await getLocalStream();
 
-        // Очистка старого соединения, если оно существует
-        if (peerConnection) {
-          peerConnection.close();
-          peerConnection = null;
-        }
-        peerConnection = new RTCPeerConnection(config);
+    // Очистка старого соединения, если оно существует
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    peerConnection = new RTCPeerConnection(config);
 
-        // Добавление треков
-        localStream.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStream);
-        });
-
-        peerConnection.onicecandidate = (event) => {
-          if (event.candidate) {
-            socket.emit('candidate', event.candidate);
-            console.log('Отправлен ICE-кандидат:', event.candidate);
-          }
-        };
-
-        peerConnection.ontrack = (event) => {
-          if (event.track.kind === "audio") {
-            remoteAudio.srcObject = event.streams[0];
-            console.log('Получен аудиопоток от другого участника');
-          }
-        };
-
-        // Устанавливаем remote description
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-        console.log('Remote description установлено');
-
-        // Создаем и устанавливаем локальный ответ
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        console.log('Local description установлено:', answer);
-
-        // Отправляем ответ на offer
-        socket.emit('answer', answer);
-        console.log('Answer отправлен:', answer);
-      } catch (err) {
-        console.error('Ошибка обработки offer:', err);
-      }
+    // Добавление треков
+    localStream.getTracks().forEach(track => {
+      peerConnection.addTrack(track, localStream);
     });
 
-    // Обработка answer
-    socket.on('answer', async (answer) => {
-      try {
-        console.log('Получен answer от другого участника');
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      } catch (err) {
-        console.error('Ошибка обработки answer:', err);
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit('candidate', event.candidate);
+        console.log('Отправлен ICE-кандидат:', event.candidate);
       }
-    });
+    };
+
+    peerConnection.ontrack = (event) => {
+      if (event.track.kind === "audio") {
+        remoteAudio.srcObject = event.streams[0];
+        console.log('Получен аудиопоток от другого участника');
+      }
+    };
+
+    // Проверка состояния signalingState перед установкой remoteDescription
+    if (peerConnection.signalingState === 'stable') {
+      console.log('signalingState стабилен, продолжаем установку remoteDescription');
+    } else {
+      console.warn('Неожиданное состояние signalingState для offer:', peerConnection.signalingState);
+      return;
+    }
+
+    // Устанавливаем remote description
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log('Remote description установлено');
+
+    // Создаем и устанавливаем локальный ответ
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    console.log('Local description установлено:', answer);
+
+    // Отправляем ответ на offer
+    socket.emit('answer', answer);
+    console.log('Answer отправлен:', answer);
+  } catch (err) {
+    console.error('Ошибка обработки offer:', err);
+  }
+});
+
+socket.on('answer', async (answer) => {
+  try {
+    console.log('Получен answer от другого участника');
+    
+    // Проверка состояния signalingState перед установкой remoteDescription
+    if (peerConnection.signalingState === 'have-remote-offer') {
+      console.log('signalingState в "have-remote-offer", устанавливаем remote description');
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log('Remote description установлено');
+    } else {
+      console.warn('Неожиданное состояние signalingState для answer:', peerConnection.signalingState);
+    }
+  } catch (err) {
+    console.error('Ошибка обработки answer:', err);
+  }
+});
+
 
     // Обработка ICE-кандидатов
     socket.on('candidate', async (candidate) => {
