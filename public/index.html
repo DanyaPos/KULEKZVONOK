@@ -82,19 +82,19 @@
       endCallBtn.style.display = 'inline-block';
     }
 
-    // Обработка offer
     socket.on('offer', async (offer) => {
   try {
     console.log('Получен offer от другого участника');
     await getLocalStream();
 
-    // Очистка существующего соединения
+    // Очистка старого соединения, если оно существует
     if (peerConnection) {
       peerConnection.close();
       peerConnection = null;
     }
     peerConnection = new RTCPeerConnection(config);
 
+    // Добавление треков
     localStream.getTracks().forEach(track => {
       // Проверяем, не был ли трек уже добавлен
       const senders = peerConnection.getSenders();
@@ -118,15 +118,22 @@
       }
     };
 
-    // Проверяем состояние перед установкой Remote Description
-    if (peerConnection.signalingState !== "stable") {
-      console.warn("Соединение не в состоянии stable, ожидание...");
+    // Перед установкой remote description проверяем состояние signalingState
+    if (peerConnection.signalingState !== 'stable') {
+      console.warn('Соединение не в состоянии "stable", ждем...');
       return;
     }
 
+    // Устанавливаем remote description
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log('Remote description установлено');
+
+    // Создаем и устанавливаем локальный ответ
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
+    console.log('Local description установлено:', answer);
+
+    // Отправляем ответ на offer
     socket.emit('answer', answer);
     console.log('Answer отправлен:', answer);
   } catch (err) {
