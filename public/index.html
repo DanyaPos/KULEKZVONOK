@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Конференция</title>
+    <title>Полина красотка</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -24,113 +24,10 @@
 </head>
 <body>
 
-    <h1>Приложение для конференции</h1>
+    <h1>Наша любовь</h1>
 
-    <!-- Кнопка для входа в конференцию -->
-    <button id="joinButton">Присоединиться к конференции</button>
-
-    <h2>Локальный звук</h2>
-    <audio id="local" controls autoplay muted></audio>
-
-    <h2>Удалённый звук</h2>
-    <audio id="remote" controls autoplay></audio>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        // Создание соединения с сервером через Socket.IO
-        const socket = io();
-
-        // Переменные для WebRTC
-        let localStream;
-        let remoteStream;
-        let peerConnection;
-
-        // Получение разрешения на доступ к микрофону
-        async function getMedia() {
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                document.getElementById('local').srcObject = localStream;
-            } catch (err) {
-                console.error('Ошибка при получении медиа-данных', err);
-            }
-        }
-
-        // Функция присоединения к конференции
-        document.getElementById('joinButton').addEventListener('click', () => {
-            const room = prompt("Введите название конференции:", "room1");
-            if (room) {
-                socket.emit('join', room);
-                getMedia();
-            }
-        });
-
-        // Создание PeerConnection
-        function createPeerConnection() {
-            const configuration = {
-                iceServers: [
-                    { urls: "stun:stun.l.google.com:19302" }  // Google STUN server
-                ]
-            };
-            peerConnection = new RTCPeerConnection(configuration);
-
-            // Добавляем локальный поток в PeerConnection
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-            // Обработка ICE-кандидатов
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    socket.emit('ice-candidate', event.candidate);
-                }
-            };
-
-            // Обработка полученного удалённого потока
-            peerConnection.ontrack = (event) => {
-                if (!remoteStream) {
-                    remoteStream = new MediaStream();
-                    document.getElementById('remote').srcObject = remoteStream;
-                }
-                remoteStream.addTrack(event.track);
-            };
-        }
-
-        // Отправка offer на сервер
-        async function createOffer() {
-            createPeerConnection();
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            socket.emit('offer', offer);
-        }
-
-        // Обработка ответа от другого участника
-        socket.on('offer', async (offer) => {
-            createPeerConnection();
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            socket.emit('answer', answer);
-        });
-
-        // Обработка ответа на ответ
-        socket.on('answer', (answer) => {
-            peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        });
-
-        // Обработка ICE-кандидатов
-        socket.on('ice-candidate', (candidate) => {
-            if (peerConnection) {
-                peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            } else {
-                // Если PeerConnection ещё не создан, отложим добавление кандидата
-                console.log('Отложено добавление ICE-кандидата, т.к. PeerConnection ещё не создан');
-            }
-        });
-
-        // Сообщение при присоединении к комнате
-        socket.on('joined', () => {
-            console.log('Присоединились к конференции!');
-            createOffer();
-        });
-
+    <img src="acc6bb80-2e17-43a4-bd94-e08aadd647c0.jpg" alt="$">
+    
     </script>
 </body>
 </html>
